@@ -3,9 +3,11 @@ const cors = require("cors");
 const mongoose = require("mongoose");
 require("dotenv").config();
 const Dish = require("./models/Dish");
+const Order = require("./models/Order");
+const Kitchen = require("./models/Kitchen");
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
@@ -15,7 +17,7 @@ mongoose.connect(process.env.MONGO_URI)
   .catch((err) => console.error("❌ MongoDB connection error:", err));
 
 app.get("/", (req, res) => {
-  res.send("GharKaKhana backend is running!");
+  res.send("Nivala backend is running!");
 });
 
 // Get all dishes
@@ -25,6 +27,27 @@ app.get("/api/dishes", async (req, res) => {
     res.json(dishes);
   } catch (err) {
     res.status(500).json({ message: "Error fetching dishes" });
+  }
+});
+
+// Seller: add a dish
+app.post("/api/dishes", async (req, res) => {
+  try {
+    const dish = await Dish.create(req.body);
+    res.status(201).json(dish);
+  } catch (err) {
+    res.status(400).json({ message: "Error creating dish", error: err.message });
+  }
+});
+
+// Seller: update dish (price, availability, prep time, etc.)
+app.patch("/api/dishes/:id", async (req, res) => {
+  try {
+    const dish = await Dish.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!dish) return res.status(404).json({ message: "Dish not found" });
+    res.json(dish);
+  } catch (err) {
+    res.status(400).json({ message: "Error updating dish" });
   }
 });
 
@@ -49,6 +72,68 @@ app.get("/api/channels/:channelName", async (req, res) => {
     res.json(channelDishes);
   } catch (err) {
     res.status(500).json({ message: "Error fetching channel dishes" });
+  }
+});
+
+// Kitchens: list + upsert profile (seller onboarding demo)
+app.get("/api/kitchens", async (req, res) => {
+  try {
+    const kitchens = await Kitchen.find().sort({ createdAt: -1 });
+    res.json(kitchens);
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching kitchens" });
+  }
+});
+
+app.post("/api/kitchens", async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ message: "Kitchen name required" });
+    const kitchen = await Kitchen.findOneAndUpdate({ name }, req.body, {
+      new: true,
+      upsert: true,
+    });
+    res.status(201).json(kitchen);
+  } catch (err) {
+    res.status(400).json({ message: "Error saving kitchen", error: err.message });
+  }
+});
+
+// Orders: create
+app.post("/api/orders", async (req, res) => {
+  try {
+    const order = await Order.create(req.body);
+    res.status(201).json(order);
+  } catch (err) {
+    res.status(400).json({ message: "Error creating order", error: err.message });
+  }
+});
+
+// Orders: list by buyer or kitchen
+app.get("/api/orders", async (req, res) => {
+  try {
+    const filter = {};
+    if (req.query.buyer) filter.buyer = req.query.buyer;
+    if (req.query.kitchen) filter.kitchen = req.query.kitchen;
+    if (req.query.status) filter.status = req.query.status;
+    const orders = await Order.find(filter).sort({ createdAt: -1 }).limit(50);
+    res.json(orders);
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching orders" });
+  }
+});
+
+// Orders: update status (seller: accept -> preparing -> ready -> completed)
+app.patch("/api/orders/:id/status", async (req, res) => {
+  try {
+    const { status } = req.body;
+    const allowed = ["Placed", "Accepted", "Preparing", "Ready", "Completed", "Cancelled"];
+    if (!allowed.includes(status)) return res.status(400).json({ message: "Invalid status" });
+    const order = await Order.findByIdAndUpdate(req.params.id, { status }, { new: true });
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    res.json(order);
+  } catch (err) {
+    res.status(400).json({ message: "Error updating order" });
   }
 });
 
