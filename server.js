@@ -5,6 +5,7 @@ require("dotenv").config();
 const Dish = require("./models/Dish");
 const Order = require("./models/Order");
 const Kitchen = require("./models/Kitchen");
+const DishRequest = require("./models/Request");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -134,6 +135,58 @@ app.patch("/api/orders/:id/status", async (req, res) => {
     res.json(order);
   } catch (err) {
     res.status(400).json({ message: "Error updating order" });
+  }
+});
+
+// Dish requests: buyer requests what they crave
+app.post("/api/requests", async (req, res) => {
+  try {
+    const r = await DishRequest.create(req.body);
+    res.status(201).json(r);
+  } catch (err) {
+    res.status(400).json({ message: "Error creating request", error: err.message });
+  }
+});
+
+app.get("/api/requests", async (req, res) => {
+  try {
+    const filter = {};
+    if (req.query.status) filter.status = req.query.status;
+    if (req.query.locality) filter.locality = req.query.locality;
+    const list = await DishRequest.find(filter).sort({ createdAt: -1 }).limit(100);
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching requests" });
+  }
+});
+
+app.patch("/api/requests/:id/accept", async (req, res) => {
+  try {
+    const { kitchen } = req.body;
+    const r = await DishRequest.findByIdAndUpdate(
+      req.params.id,
+      { status: "accepted", acceptedBy: kitchen || "" },
+      { new: true }
+    );
+    if (!r) return res.status(404).json({ message: "Request not found" });
+    res.json(r);
+  } catch (err) {
+    res.status(400).json({ message: "Error accepting request" });
+  }
+});
+
+// Demand map: aggregate open requests by dish + locality
+app.get("/api/demand", async (req, res) => {
+  try {
+    const agg = await DishRequest.aggregate([
+      { $match: { status: "open" } },
+      { $group: { _id: { dish: "$dishName", locality: "$locality" }, count: { $sum: 1 }, avgOffer: { $avg: "$priceOffer" } } },
+      { $sort: { count: -1 } },
+      { $limit: 20 },
+    ]);
+    res.json(agg.map((a) => ({ dish: a._id.dish, locality: a._id.locality, count: a.count, avgOffer: Math.round(a.avgOffer || 0) })));
+  } catch (err) {
+    res.status(500).json({ message: "Error computing demand" });
   }
 });
 
