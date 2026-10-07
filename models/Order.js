@@ -29,6 +29,8 @@ const orderSchema = new mongoose.Schema(
     },
     etaMinutes: { type: Number, default: 40 },
     kitchen: { type: String, default: "" },
+    promoCode: { type: String, default: "" },
+    discount: { type: Number, default: 0 },
   },
   { timestamps: true }
 );
