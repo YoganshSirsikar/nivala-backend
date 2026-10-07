@@ -6,6 +6,7 @@ const Dish = require("./models/Dish");
 const Order = require("./models/Order");
 const Kitchen = require("./models/Kitchen");
 const DishRequest = require("./models/Request");
+const Review = require("./models/Review");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -187,6 +188,29 @@ app.get("/api/demand", async (req, res) => {
     res.json(agg.map((a) => ({ dish: a._id.dish, locality: a._id.locality, count: a.count, avgOffer: Math.round(a.avgOffer || 0) })));
   } catch (err) {
     res.status(500).json({ message: "Error computing demand" });
+  }
+});
+
+// Reviews: real shared reviews in Atlas
+app.post("/api/reviews", async (req, res) => {
+  try {
+    const { dishId, reviewer, rating, comment } = req.body;
+    if (!dishId || !rating) return res.status(400).json({ message: "dishId and rating required" });
+    const r = await Review.create({ dishId, reviewer: reviewer || "Guest", rating, comment: comment || "" });
+    res.status(201).json(r);
+  } catch (err) {
+    res.status(400).json({ message: "Error saving review", error: err.message });
+  }
+});
+
+app.get("/api/reviews", async (req, res) => {
+  try {
+    const filter = {};
+    if (req.query.dishId) filter.dishId = req.query.dishId;
+    const list = await Review.find(filter).sort({ createdAt: -1 }).limit(100);
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching reviews" });
   }
 });
 
